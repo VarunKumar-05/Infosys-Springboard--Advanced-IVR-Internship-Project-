@@ -1,12 +1,15 @@
 """
 Analytics endpoints — metrics, call history, and performance data.
+Reads from Supabase PostgreSQL via database.py proxy objects.
 """
 
 from __future__ import annotations
 from fastapi import APIRouter
 from app.models import AnalyticsResponse, CallMetrics, DispatchMetrics
 from app.database import (
-    ANALYTICS, CALL_HISTORY, AMBULANCES, ACTIVE_CALLS, _now,
+    ANALYTICS, ACTIVE_CALLS, APPOINTMENTS, _now,
+    get_analytics, get_call_history, get_all_ambulances_db,
+    reset_analytics_db, get_all_appointments,
 )
 from app.models import AmbulanceStatus
 
@@ -14,31 +17,33 @@ router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
 
 
 @router.get("", summary="Get full analytics dashboard data")
-def get_analytics() -> AnalyticsResponse:
+def get_analytics_endpoint() -> AnalyticsResponse:
     """Return aggregated metrics for calls, dispatch, and recent activity."""
-    total = ANALYTICS["total_calls"] or 1
-    dispatches = ANALYTICS["total_dispatches"] or 1
+    analytics = get_analytics()
+    total = analytics["total_calls"] or 1
+    dispatches = analytics["total_dispatches"] or 1
 
-    available = sum(1 for a in AMBULANCES.values() if a["status"] == AmbulanceStatus.AVAILABLE)
+    ambulances = get_all_ambulances_db()
+    available = sum(1 for a in ambulances if a["status"] == AmbulanceStatus.AVAILABLE)
 
     call_metrics = CallMetrics(
-        total_calls=ANALYTICS["total_calls"],
-        emergency_calls=ANALYTICS["emergency_calls"],
-        routine_calls=ANALYTICS["routine_calls"],
-        avg_duration_seconds=round(ANALYTICS["total_duration_seconds"] / total, 1),
-        avg_response_time_ms=round(ANALYTICS["total_response_time_ms"] / total, 1),
-        triage_accuracy_percent=round(ANALYTICS["triage_correct"] / total * 100, 1),
+        total_calls=analytics["total_calls"],
+        emergency_calls=analytics["emergency_calls"],
+        routine_calls=analytics["routine_calls"],
+        avg_duration_seconds=round(analytics["total_duration_seconds"] / total, 1),
+        avg_response_time_ms=round(analytics["total_response_time_ms"] / total, 1),
+        triage_accuracy_percent=round(analytics["triage_correct"] / total * 100, 1),
     )
 
     dispatch_metrics = DispatchMetrics(
-        total_dispatches=ANALYTICS["total_dispatches"],
-        avg_eta_minutes=round(ANALYTICS["total_eta_minutes"] / dispatches, 1) if ANALYTICS["total_dispatches"] else 0.0,
+        total_dispatches=analytics["total_dispatches"],
+        avg_eta_minutes=round(analytics["total_eta_minutes"] / dispatches, 1) if analytics["total_dispatches"] else 0.0,
         ambulances_available=available,
-        ambulances_total=len(AMBULANCES),
-        avg_solver_time_ms=round(ANALYTICS["total_solver_time_ms"] / dispatches, 1),
+        ambulances_total=len(ambulances),
+        avg_solver_time_ms=round(analytics["total_solver_time_ms"] / dispatches, 1),
     )
 
-    recent = CALL_HISTORY[-10:][::-1]
+    recent = get_call_history(10)
 
     return AnalyticsResponse(
         call_metrics=call_metrics,
@@ -49,9 +54,9 @@ def get_analytics() -> AnalyticsResponse:
 
 
 @router.get("/call-history", summary="Get completed call history")
-def get_call_history(limit: int = 20) -> list[dict]:
+def get_call_history_endpoint(limit: int = 20) -> list[dict]:
     """Return completed calls, newest first."""
-    return CALL_HISTORY[-limit:][::-1]
+    return get_call_history(limit)
 
 
 @router.get("/active-calls", summary="Get currently active calls")
@@ -73,16 +78,13 @@ def get_active_calls() -> list[dict]:
 @router.post("/reset", summary="Reset all analytics counters")
 def reset_analytics() -> dict:
     """Reset analytics to initial state (for testing)."""
-    ANALYTICS.update({
-        "total_calls": 0,
-        "emergency_calls": 0,
-        "routine_calls": 0,
-        "total_dispatches": 0,
-        "total_response_time_ms": 0,
-        "total_duration_seconds": 0.0,
-        "total_solver_time_ms": 0,
-        "triage_correct": 0,
-        "total_eta_minutes": 0.0,
-    })
-    CALL_HISTORY.clear()
+    reset_analytics_db()
+    from app import supabase_db as db
+    db.execute("DELETE FROM call_history")
     return {"status": "analytics reset", "timestamp": _now().isoformat()}
+
+
+@router.get("/appointments", summary="List all booked appointments")
+def list_appointments() -> list[dict]:
+    """Return all appointments booked through the IVR system."""
+    return get_all_appointments()

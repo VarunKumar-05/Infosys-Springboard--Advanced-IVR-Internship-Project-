@@ -1,5 +1,5 @@
 """
-Patient Records endpoints — mock patient registry for the simulator.
+Patient Records endpoints — backed by Supabase PostgreSQL.
 """
 
 from __future__ import annotations
@@ -7,85 +7,12 @@ import uuid
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
-from app.database import _now
+from app.database import (
+    _now, get_all_patients, get_patient, create_patient,
+    update_patient_fields, delete_patient_db,
+)
 
 router = APIRouter(prefix="/api/patients", tags=["Patient Records"])
-
-
-# ── In-memory patient store ──────────────────────────────────────────────
-
-PATIENTS: dict[str, dict] = {
-    "PAT-001": {
-        "id": "PAT-001",
-        "name": "John Anderson",
-        "age": 58,
-        "gender": "male",
-        "phone": "+1-555-0101",
-        "blood_type": "O+",
-        "allergies": ["Penicillin"],
-        "medical_history": ["hypertension", "type 2 diabetes"],
-        "emergency_contact": {"name": "Mary Anderson", "phone": "+1-555-0102", "relation": "spouse"},
-        "insurance": {"provider": "BlueCross", "policy": "BC-449821", "status": "active"},
-        "last_visit": "2026-02-15",
-        "created_at": _now().isoformat(),
-    },
-    "PAT-002": {
-        "id": "PAT-002",
-        "name": "Sarah Johnson",
-        "age": 34,
-        "gender": "female",
-        "phone": "+1-555-0201",
-        "blood_type": "A-",
-        "allergies": [],
-        "medical_history": ["asthma"],
-        "emergency_contact": {"name": "David Johnson", "phone": "+1-555-0202", "relation": "brother"},
-        "insurance": {"provider": "Aetna", "policy": "AE-773152", "status": "active"},
-        "last_visit": "2026-01-22",
-        "created_at": _now().isoformat(),
-    },
-    "PAT-003": {
-        "id": "PAT-003",
-        "name": "Robert Chen",
-        "age": 72,
-        "gender": "male",
-        "phone": "+1-555-0301",
-        "blood_type": "B+",
-        "allergies": ["Sulfa drugs", "Latex"],
-        "medical_history": ["coronary artery disease", "atrial fibrillation", "COPD"],
-        "emergency_contact": {"name": "Lisa Chen", "phone": "+1-555-0302", "relation": "daughter"},
-        "insurance": {"provider": "Medicare", "policy": "MC-881234", "status": "active"},
-        "last_visit": "2026-02-28",
-        "created_at": _now().isoformat(),
-    },
-    "PAT-004": {
-        "id": "PAT-004",
-        "name": "Emily Martinez",
-        "age": 5,
-        "gender": "female",
-        "phone": "+1-555-0401",
-        "blood_type": "AB+",
-        "allergies": ["Peanuts"],
-        "medical_history": [],
-        "emergency_contact": {"name": "Carlos Martinez", "phone": "+1-555-0402", "relation": "father"},
-        "insurance": {"provider": "UnitedHealth", "policy": "UH-556789", "status": "active"},
-        "last_visit": "2026-02-10",
-        "created_at": _now().isoformat(),
-    },
-    "PAT-005": {
-        "id": "PAT-005",
-        "name": "James Wilson",
-        "age": 45,
-        "gender": "male",
-        "phone": "+1-555-0501",
-        "blood_type": "O-",
-        "allergies": [],
-        "medical_history": ["migraines", "lower back pain"],
-        "emergency_contact": {"name": "Angela Wilson", "phone": "+1-555-0502", "relation": "spouse"},
-        "insurance": {"provider": "Cigna", "policy": "CG-334567", "status": "expired"},
-        "last_visit": "2025-12-05",
-        "created_at": _now().isoformat(),
-    },
-}
 
 
 # ── Request / response models ───────────────────────────────────────────
@@ -113,7 +40,7 @@ class PatientUpdate(BaseModel):
 @router.get("", summary="List all patients")
 def list_patients(search: str | None = None) -> list[dict]:
     """Return all patient records, optionally filtered by name search."""
-    patients = list(PATIENTS.values())
+    patients = get_all_patients()
     if search:
         q = search.lower()
         patients = [p for p in patients if q in p["name"].lower() or q in p.get("phone", "")]
@@ -121,50 +48,48 @@ def list_patients(search: str | None = None) -> list[dict]:
 
 
 @router.get("/{patient_id}", summary="Get patient by ID")
-def get_patient(patient_id: str) -> dict:
-    if patient_id not in PATIENTS:
+def get_patient_endpoint(patient_id: str) -> dict:
+    p = get_patient(patient_id)
+    if not p:
         raise HTTPException(404, f"Patient '{patient_id}' not found")
-    return PATIENTS[patient_id]
+    return p
 
 
 @router.post("", status_code=201, summary="Register new patient")
-def create_patient(body: PatientCreate) -> dict:
+def create_patient_endpoint(body: PatientCreate) -> dict:
     pid = f"PAT-{uuid.uuid4().hex[:4].upper()}"
-    patient = {
-        "id": pid,
+    data = {
         **body.model_dump(),
         "emergency_contact": None,
         "insurance": None,
         "last_visit": None,
-        "created_at": _now().isoformat(),
     }
-    PATIENTS[pid] = patient
-    return patient
+    return create_patient(pid, data)
 
 
 @router.put("/{patient_id}", summary="Update patient details")
-def update_patient(patient_id: str, body: PatientUpdate) -> dict:
-    if patient_id not in PATIENTS:
+def update_patient_endpoint(patient_id: str, body: PatientUpdate) -> dict:
+    p = get_patient(patient_id)
+    if not p:
         raise HTTPException(404, f"Patient '{patient_id}' not found")
     updates = body.model_dump(exclude_none=True)
-    PATIENTS[patient_id].update(updates)
-    return PATIENTS[patient_id]
+    result = update_patient_fields(patient_id, updates)
+    return result
 
 
 @router.delete("/{patient_id}", summary="Delete patient")
-def delete_patient(patient_id: str) -> dict:
-    if patient_id not in PATIENTS:
+def delete_patient_endpoint(patient_id: str) -> dict:
+    if not delete_patient_db(patient_id):
         raise HTTPException(404, f"Patient '{patient_id}' not found")
-    del PATIENTS[patient_id]
     return {"deleted": patient_id, "status": "ok"}
 
 
 @router.get("/{patient_id}/risk-profile", summary="Generate risk profile")
 def get_risk_profile(patient_id: str) -> dict:
     """Compute a mock risk profile based on patient data."""
-    if patient_id not in PATIENTS:
+    p = get_patient(patient_id)
+    if not p:
         raise HTTPException(404, f"Patient '{patient_id}' not found")
-    p = PATIENTS[patient_id]
     risk_score = 0
     factors = []
 

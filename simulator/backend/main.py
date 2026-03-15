@@ -1,4 +1,4 @@
-"""
+﻿"""
 AI Hospital IVR Web Simulator — FastAPI Backend
 ================================================
 Main entry point.  Registers all routers, configures CORS,
@@ -9,13 +9,30 @@ Run:
 """
 
 from __future__ import annotations
+import os
+from dotenv import load_dotenv
 
-from fastapi import FastAPI
+# Try to load local .env at backend folder or root folder
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv()
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
-from app.routers import scenarios, calls, nlu, triage, dispatch, analytics, patients, logs, settings
+from app.routers import scenarios, calls, nlu, triage, dispatch, analytics, patients, logs, settings, stt, tts
 
-# ── Application ──────────────────────────────────────────────────────────
+# ── Initialize Supabase PostgreSQL ──────────────────────────────────────────
+from app import supabase_db
+supabase_db.init_db()
+
+# ── Application ─────────────────────────────────────────────────────────────
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+
 app = FastAPI(
     title="AI Hospital IVR Simulator",
     description=(
@@ -28,6 +45,10 @@ app = FastAPI(
     redoc_url="/redoc",        # ReDoc
     openapi_url="/openapi.json",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # ── CORS (allow React dev server) ────────────────────────────────────────
 app.add_middleware(
@@ -48,6 +69,8 @@ app.include_router(analytics.router)
 app.include_router(patients.router)
 app.include_router(logs.router)
 app.include_router(settings.router)
+app.include_router(stt.router)
+app.include_router(tts.router)
 
 
 # ── Root & menu ──────────────────────────────────────────────────────────

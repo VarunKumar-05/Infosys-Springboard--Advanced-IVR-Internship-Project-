@@ -133,6 +133,8 @@ class CallInputResponse(BaseModel):
     dispatch: Optional[DispatchResult] = None
     system_response: str
     call_status: CallStatus
+    actions: list[dict] = []
+    response_text: Optional[str] = None
 
 class CallStatusResponse(BaseModel):
     call_session_id: str

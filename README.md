@@ -41,7 +41,6 @@ An AI-powered Interactive Voice Response (IVR) system for hospitals that replace
 
 | Layer | Technologies |
 |-------|-------------|
-| Voice | Twilio, Azure ACS, FreeSWITCH |
 | AI/NLU | Dialogflow CX, Deepgram, spaCy |
 | Optimization | SCIP, Gurobi |
 | Backend | Node.js (NestJS), Python |

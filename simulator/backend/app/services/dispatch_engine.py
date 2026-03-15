@@ -1,6 +1,7 @@
 """
 Mock Dispatch ILP Engine — distance-based ambulance assignment that
 simulates a Gurobi-based Integer Linear Programming solver.
+Uses Supabase PostgreSQL for ambulance state.
 """
 
 from __future__ import annotations
@@ -8,7 +9,7 @@ import time
 import random
 import uuid
 from app.models import AmbulanceStatus, AmbulanceType, Priority
-from app.database import AMBULANCES, haversine_km, _now
+from app.database import get_all_ambulances_db, get_ambulance_db, update_ambulance_db, haversine_km, _now
 
 
 def assign(
@@ -23,9 +24,11 @@ def assign(
     start = time.perf_counter()
     patient_loc = {"lat": patient_lat, "lon": patient_lon}
 
+    all_ambulances = get_all_ambulances_db()
+
     # Filter available ambulances
     candidates = []
-    for amb_id, amb in AMBULANCES.items():
+    for amb in all_ambulances:
         if amb["status"] != AmbulanceStatus.AVAILABLE:
             continue
         # For critical / high, prefer ALS units
@@ -33,15 +36,15 @@ def assign(
             if amb["type"] != AmbulanceType.ALS:
                 continue
         dist = haversine_km(patient_loc, amb["location"])
-        candidates.append((amb_id, amb, dist))
+        candidates.append((amb["id"], amb, dist))
 
     # If no ALS available, fall back to any available
     if not candidates:
-        for amb_id, amb in AMBULANCES.items():
+        for amb in all_ambulances:
             if amb["status"] != AmbulanceStatus.AVAILABLE:
                 continue
             dist = haversine_km(patient_loc, amb["location"])
-            candidates.append((amb_id, amb, dist))
+            candidates.append((amb["id"], amb, dist))
 
     if not candidates:
         solver_ms = int((time.perf_counter() - start) * 1000) + random.randint(150, 300)
@@ -61,14 +64,16 @@ def assign(
     if priority == Priority.CRITICAL:
         eta_minutes = max(1, eta_minutes - 2)  # lights & sirens
 
-    # Update ambulance status
-    AMBULANCES[best_id]["status"] = AmbulanceStatus.DISPATCHED
-    AMBULANCES[best_id]["last_updated"] = _now().isoformat()
+    # Update ambulance status in DB
+    update_ambulance_db(best_id, {"status": AmbulanceStatus.DISPATCHED})
 
     solver_ms = int((time.perf_counter() - start) * 1000) + random.randint(180, 350)
 
+    amb_type = best_amb["type"]
+    type_value = amb_type.value if hasattr(amb_type, "value") else amb_type
+
     reasoning = (
-        f"Selected {best_id} (closest available {best_amb['type'].value} unit). "
+        f"Selected {best_id} (closest available {type_value} unit). "
         f"Distance: {best_dist:.1f} km. "
         f"ETA: {eta_minutes} min. "
         f"Objective: MIN(response_time + coverage_gap). "
@@ -92,13 +97,14 @@ def assign(
 
 def get_all_ambulances() -> list[dict]:
     """Return current state of all ambulances."""
-    return list(AMBULANCES.values())
+    return get_all_ambulances_db()
 
 
 def reset_ambulance(ambulance_id: str) -> dict | None:
     """Reset an ambulance back to available."""
-    if ambulance_id in AMBULANCES:
-        AMBULANCES[ambulance_id]["status"] = AmbulanceStatus.AVAILABLE
-        AMBULANCES[ambulance_id]["last_updated"] = _now().isoformat()
-        return AMBULANCES[ambulance_id]
+    amb = get_ambulance_db(ambulance_id)
+    if amb:
+        update_ambulance_db(ambulance_id, {"status": AmbulanceStatus.AVAILABLE})
+        amb["status"] = AmbulanceStatus.AVAILABLE
+        return amb
     return None

@@ -1,0 +1,50 @@
+Milestone 3: AI Implementation & Technical Documentation
+This document outlines the artificial intelligence architecture powering the City Hospital IVR Simulator. The system implements a real-time, multi-modal AI pipeline that converts caller speech to text, applies Natural Language Understanding (NLU) for medical triage, and synthesizes dynamic vocal responses.
+
+1. System Architecture Overview
+The backend processing pipeline operates asynchronously and divides the AI workload across specialized services:
+
+Speech-to-Text (STT): Converts patient audio to text.
+NLU Engine: Analyzes transcripts for intent, entities, sentiment, and distress levels.
+Triage & Dispatch Engines: Rule-based decision engines simulating clinical processing based on parsed NLU data.
+Text-to-Speech (TTS): Synthesizes the generated LLM responses into spoken medical guidelines.
+2. Models and GCP Integrations
+The simulator relies heavily on Google Cloud Platform (GCP) and Google GenAI for enterprise-grade healthcare processing.
+
+Speech-To-Text (STT)
+Implementation File: app/routers/stt.py
+
+Primary Model: Google Cloud Speech-to-Text V2 (Chirp 3).
+Known for its robust performance on diverse accents and noisy telephony environments, the chirp_3 model accurately transcribes patient symptoms.
+Failover Model: Gemini 2.0 Flash Multimodal.
+If the GCP speech_v2 client fails or credentials are missing, the system automatically falls back to sending the raw audio bytes as a multimodal prompt to gemini-2.0-flash.
+Natural Language Understanding (NLU) & Orchestration
+Implementation File: app/services/nlu_engine.py
+
+Primary Orchestrator: Google Gemini 2.0 Flash (gemini-2.0-flash).
+Served via the google-genai SDK, it operates with strict system prompts tailored to healthcare triage (extracting symptoms, evaluating sentiments, and making function calls).
+Gemini acts as the brain that decides whether to trigger book_appointment for routine queries or dispatch_ambulance for emergencies.
+Fallback Orchestrator: HuggingFace Inference Client (if Gemini API is unavailable).
+Embeddings & Vectorization (Local Model):
+Instead of relying on external cloud embedding endpoints (like Vertex text-embedding) which add network latency for simple intent matching, the engine implements a blazing-fast Bag of Words (BoW) vectorization model.
+It uses scikit-learn's CountVectorizer initialized with a static corpus of symptoms and intents mapped to an X_bow matrix.
+Intent classification utilizes mathematically computed Cosine Similarity (cosine_similarity(user_bow, X_bow)) against the incoming user transcript before passing complex scenarios to the LLM.
+Text-To-Speech (TTS)
+Implementation File: app/routers/tts.py
+
+Primary Model: Google Cloud Text-to-Speech (Chirp 3 HD).
+The system utilizes the en-US-Chirp3-HD-Puck voice. This model provides highly realistic, empathetic, and human-like voice synthesis, which is critical for reassuring distressed patients during the simulated calls. Configured to output MP3 encoding to stream efficiently to the frontend simulator.
+3. Triage Inference & Clinical Logic
+Implementation File: app/services/triage_engine.py
+
+The triage engine acts as a simulated Integer Linear Programming (ILP) solver. While the NLU engine pulls entities (e.g., patient age, recognized keywords like "chest pain", duration) using Regex pattern matching and severity modifiers, the triage engine combines those logical constraints:
+
+Evaluates constraints (e.g., "chest pain" + patient > 40 = mandatory ER evaluation).
+Outputs an actionable clinical reasoning string and a calculated severity out of 10.
+Implements real-time resource constraint checks (simulating bed availability in the local "emergency_room" vs routing to "partner hospital").
+4. Inference Speed & Performance Optimizations
+Because voice interfaces require conversational latency (typically < 1000ms), multiple engineering techniques are used to constrain round-trip-times:
+
+Hybrid Async/Threaded Architecture: Network-intensive GCP SDK methods (STT, TTS) that traditionally block ASGI servers are invoked inside asyncio.to_thread(_synthesize). This unblocks FastAPI to handle background simulation traffic simultaneously.
+Local Machine Learning Pre-computation: The BoW intent classification happens locally in sub-millisecond computations (time.perf_counter() tracked). Gemini is only called with short max tokens (max_output_tokens=100) and low temperature (temperature=0.3) for highly deterministic, fast generation.
+Tracking Latency: Both the NLU and the Triage engine dynamically inject a processing_time_ms into their response payloads to track exact latency in the dashboard monitoring panels. Triage reasoning includes a mocked solver_ms buffer (random.randint(250, 450)) to simulate complex ILP solver execution realistically in the UI.

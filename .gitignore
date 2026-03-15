@@ -82,3 +82,28 @@ Thumbs.db
 # Optional IDE
 .project
 .classpath
+
+# files and folders
+internship_artifacts.zip
+test.wav
+
+#milestone 3
+debug.mp3
+debug3.mp3
+final_test.mp3
+final.mp3
+gcp-key.json
+test3.mp3
+test4.mp3
+Agile_template_v0.1.xls
+agile-claude-version.xlsx
+claude-version.xls
+debug2.mp3
+test.mp3
+test2.mp3
+test_real.mp3
+test_audio.wav
+Unit_Test_plan_v0.1.xlsx
+Agile-dev-version-1.xls
+Defect_Tracker Template_v0.1.xlsx
+claude-version.xlsx
