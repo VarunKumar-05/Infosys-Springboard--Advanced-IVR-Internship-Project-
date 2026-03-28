@@ -162,8 +162,22 @@ export default function CallSimulator() {
     setLastResponse(null);
     setError(null);
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = new URL(`${protocol}//${window.location.host}/api/calls/ws/${id}`);
+    // Extract the host from VITE_API_BASE_URL so WebSockets point to the backend (e.g. Render)
+    const apiBase = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+    let wsHost = window.location.host;
+    let protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    
+    if (apiBase) {
+      try {
+        const parsedNode = new URL(apiBase);
+        wsHost = parsedNode.host;
+        protocol = parsedNode.protocol === "https:" ? "wss:" : "ws:";
+      } catch (e) {
+        // Fallback to defaults
+      }
+    }
+
+    const wsUrl = new URL(`${protocol}//${wsHost}/api/calls/ws/${id}`);
     if (callerPhone.trim()) {
       wsUrl.searchParams.append("phone", callerPhone.trim());
     }
