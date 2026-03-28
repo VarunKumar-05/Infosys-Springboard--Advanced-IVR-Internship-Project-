@@ -1,7 +1,7 @@
 """
 Mock Dispatch ILP Engine — distance-based ambulance assignment that
 simulates a Gurobi-based Integer Linear Programming solver.
-Uses Supabase PostgreSQL for ambulance state.
+Uses PostgreSQL for ambulance state.
 """
 
 from __future__ import annotations

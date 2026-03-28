@@ -1,5 +1,5 @@
 """
-System Logs endpoints — backed by Supabase PostgreSQL.
+System Logs endpoints — backed by PostgreSQL.
 """
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ import uuid
 import json
 from datetime import datetime, timezone
 from fastapi import APIRouter
-from app import supabase_db as db
+from app import postgres_db as db
 
 router = APIRouter(prefix="/api/logs", tags=["System Logs"])
 

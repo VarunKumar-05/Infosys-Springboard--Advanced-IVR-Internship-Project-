@@ -1,5 +1,5 @@
 """
-Patient Records endpoints — backed by Supabase PostgreSQL.
+Patient Records endpoints — backed by PostgreSQL.
 """
 
 from __future__ import annotations

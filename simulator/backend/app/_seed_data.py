@@ -1,6 +1,6 @@
 """
 Seed data for the IVR Simulator — extracted from the original in-memory stores.
-Used by supabase_db.init_db() to populate tables on first run.
+Used by postgres_db.init_db() to populate tables on first run.
 """
 
 from __future__ import annotations

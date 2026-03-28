@@ -79,7 +79,7 @@ def get_active_calls() -> list[dict]:
 def reset_analytics() -> dict:
     """Reset analytics to initial state (for testing)."""
     reset_analytics_db()
-    from app import supabase_db as db
+    from app import postgres_db as db
     db.execute("DELETE FROM call_history")
     return {"status": "analytics reset", "timestamp": _now().isoformat()}
 

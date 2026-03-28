@@ -1,7 +1,7 @@
 """
-Database layer for the IVR Simulator — backed by Supabase PostgreSQL.
+Database layer for the IVR Simulator — backed by PostgreSQL.
 Provides the same public API as the original in-memory version, but all
-reads/writes go through PostgreSQL via supabase_db helpers.
+reads/writes go through PostgreSQL via postgres_db helpers.
 
 ACTIVE_CALLS remains in-memory (ephemeral session state).
 """
@@ -15,7 +15,7 @@ from app.models import (
     AmbulanceStatus, AmbulanceType, CallStatus,
     TriageLevel, Location,
 )
-from app import supabase_db as db
+from app import postgres_db as db
 
 
 def _now() -> datetime:

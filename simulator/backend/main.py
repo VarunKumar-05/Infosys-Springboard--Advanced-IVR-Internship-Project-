@@ -1,4 +1,4 @@
-﻿"""
+"""
 AI Hospital IVR Web Simulator — FastAPI Backend
 ================================================
 Main entry point.  Registers all routers, configures CORS,
@@ -15,6 +15,23 @@ from dotenv import load_dotenv
 # Try to load local .env at backend folder or root folder
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 load_dotenv()
+import os
+import base64
+
+# --- VERCEL GCP KEY HANDLING ---
+gcp_b64 = os.getenv("GCP_KEY_BASE64")
+if gcp_b64:
+    gcp_path = "/tmp/gcp-key.json"
+    try:
+        with open(gcp_path, "wb") as f:
+            f.write(base64.b64decode(gcp_b64))
+        # Tell Google Cloud SDK where to find the key
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = gcp_path
+        print("[System] Successfully decoded GCP key to /tmp storage.")
+    except Exception as e:
+        print(f"[Error] Failed to decode GCP key: {e}")
+# -------------------------------
+
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,9 +42,9 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.routers import scenarios, calls, nlu, triage, dispatch, analytics, patients, logs, settings, stt, tts
 
-# ── Initialize Supabase PostgreSQL ──────────────────────────────────────────
-from app import supabase_db
-supabase_db.init_db()
+# ── Initialize PostgreSQL ──────────────────────────────────────────
+from app import postgres_db
+postgres_db.init_db()
 
 # ── Application ─────────────────────────────────────────────────────────────
 

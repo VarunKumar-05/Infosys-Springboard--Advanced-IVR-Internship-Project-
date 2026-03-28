@@ -17,9 +17,9 @@ _pool: psycopg2.pool.ThreadedConnectionPool | None = None
 def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
     global _pool
     if _pool is None:
-        url = os.getenv("SUPABASE_DATABASE_URL")
+        url = os.getenv("POSTGRES_DB_URL")
         if not url:
-            raise RuntimeError("SUPABASE_DATABASE_URL is not set")
+            raise RuntimeError("POSTGRES_DB_URL is not set")
         _pool = psycopg2.pool.ThreadedConnectionPool(1, 10, url)
     return _pool
 
@@ -170,7 +170,7 @@ CREATE TABLE IF NOT EXISTS resources (
 
 def init_db() -> None:
     """Create tables (idempotent) and seed initial data if tables are empty."""
-    print("[DB] Initializing Supabase PostgreSQL tables...")
+    print("[DB] Initializing PostgreSQL tables...")
     execute(_TABLES_SQL)
 
     # Seed analytics row if not present
@@ -205,7 +205,7 @@ def init_db() -> None:
     if count and count["cnt"] == 0:
         _seed_logs()
 
-    print("[DB] Supabase initialization complete.")
+    print("[DB] PostgreSQL initialization complete.")
 
 
 # ── Seed Functions ───────────────────────────────────────────────────────
