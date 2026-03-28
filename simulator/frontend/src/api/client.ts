@@ -3,7 +3,7 @@
  * Uses the Vite proxy so all calls go to /api/...
  */
 
-const BASE = "";  // Vite proxies /api → http://localhost:8000
+const BASE = import.meta.env.VITE_API_BASE_URL || "";
 
 // ── Generic fetch helper ────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ async function request<T>(
   return res.json();
 }
 
-function get<T>(path: string)               { return request<T>(path); }
+function get<T>(path: string) { return request<T>(path); }
 function post<T>(path: string, body?: unknown) {
   return request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined });
 }
@@ -188,10 +188,10 @@ export interface Analytics {
 
 export const api = {
   // Menu
-  getMenu: ()               => get<MenuResponse>("/api/menu"),
+  getMenu: () => get<MenuResponse>("/api/menu"),
 
   // Scenarios
-  listScenarios: ()         => get<Scenario[]>("/api/scenarios"),
+  listScenarios: () => get<Scenario[]>("/api/scenarios"),
   getScenario: (id: string) => get<Scenario>(`/api/scenarios/${id}`),
   createScenario: (body: Partial<Scenario>) => post<Scenario>("/api/scenarios", body),
   deleteScenario: (id: string) => del<{ deleted: string }>(`/api/scenarios/${id}`),
