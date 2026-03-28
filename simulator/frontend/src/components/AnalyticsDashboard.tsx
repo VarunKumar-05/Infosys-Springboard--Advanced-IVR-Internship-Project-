@@ -8,7 +8,6 @@ export default function AnalyticsDashboard() {
   const [history, setHistory] = useState<Record<string, unknown>[]>([]);
   const [activeCalls, setActiveCalls] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
-  const [autoRefresh, setAutoRefresh] = useState(true);
 
   const load = async () => {
     setLoading(true);
@@ -26,13 +25,6 @@ export default function AnalyticsDashboard() {
   };
 
   useEffect(() => { load(); }, []);
-
-  // Auto-refresh every 3 seconds
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const interval = setInterval(load, 3000);
-    return () => clearInterval(interval);
-  }, [autoRefresh]);
 
   const resetAll = async () => {
     await api.resetAnalytics();
@@ -70,15 +62,6 @@ export default function AnalyticsDashboard() {
         <button className="btn btn-danger btn-sm" onClick={resetAll}>
           Reset Analytics
         </button>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", fontSize: 13, cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={autoRefresh}
-            onChange={(e) => setAutoRefresh(e.target.checked)}
-            style={{ width: 14, height: 14 }}
-          />
-          Auto-refresh (3s)
-        </label>
       </div>
 
       {/* ── Call Metrics ──────────────────────────────────── */}

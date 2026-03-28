@@ -43,8 +43,8 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.routers import scenarios, calls, nlu, triage, dispatch, analytics, patients, logs, settings, stt, tts
 
 # ── Initialize PostgreSQL ──────────────────────────────────────────
-from app import postgres_db
-postgres_db.init_db()
+# from app import postgres_db
+# postgres_db.init_db()  # Disabled to speed up Vercel Serverless Cold Starts
 
 # ── Application ─────────────────────────────────────────────────────────────
 

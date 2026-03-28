@@ -258,66 +258,8 @@ SEED_AMBULANCES: dict[str, dict] = {
 
 # ── Patients ─────────────────────────────────────────────────────────────
 
-SEED_PATIENTS: dict[str, dict] = {
-    "PAT-001": {
-        "id": "PAT-001", "name": "John Anderson", "age": 58, "gender": "male",
-        "phone": "+1-555-0101", "blood_type": "O+", "allergies": ["Penicillin"],
-        "medical_history": ["hypertension", "type 2 diabetes"],
-        "emergency_contact": {"name": "Mary Anderson", "phone": "+1-555-0102", "relation": "spouse"},
-        "insurance": {"provider": "BlueCross", "policy": "BC-449821", "status": "active"},
-        "last_visit": "2026-02-15",
-    },
-    "PAT-002": {
-        "id": "PAT-002", "name": "Sarah Johnson", "age": 34, "gender": "female",
-        "phone": "+1-555-0201", "blood_type": "A-", "allergies": [],
-        "medical_history": ["asthma"],
-        "emergency_contact": {"name": "David Johnson", "phone": "+1-555-0202", "relation": "brother"},
-        "insurance": {"provider": "Aetna", "policy": "AE-773152", "status": "active"},
-        "last_visit": "2026-01-22",
-    },
-    "PAT-003": {
-        "id": "PAT-003", "name": "Robert Chen", "age": 72, "gender": "male",
-        "phone": "+1-555-0301", "blood_type": "B+", "allergies": ["Sulfa drugs", "Latex"],
-        "medical_history": ["coronary artery disease", "atrial fibrillation", "COPD"],
-        "emergency_contact": {"name": "Lisa Chen", "phone": "+1-555-0302", "relation": "daughter"},
-        "insurance": {"provider": "Medicare", "policy": "MC-881234", "status": "active"},
-        "last_visit": "2026-02-28",
-    },
-    "PAT-004": {
-        "id": "PAT-004", "name": "Emily Martinez", "age": 5, "gender": "female",
-        "phone": "+1-555-0401", "blood_type": "AB+", "allergies": ["Peanuts"],
-        "medical_history": [],
-        "emergency_contact": {"name": "Carlos Martinez", "phone": "+1-555-0402", "relation": "father"},
-        "insurance": {"provider": "UnitedHealth", "policy": "UH-556789", "status": "active"},
-        "last_visit": "2026-02-10",
-    },
-    "PAT-005": {
-        "id": "PAT-005", "name": "James Wilson", "age": 45, "gender": "male",
-        "phone": "+1-555-0501", "blood_type": "O-", "allergies": [],
-        "medical_history": ["migraines", "lower back pain"],
-        "emergency_contact": {"name": "Angela Wilson", "phone": "+1-555-0502", "relation": "spouse"},
-        "insurance": {"provider": "Cigna", "policy": "CG-334567", "status": "expired"},
-        "last_visit": "2025-12-05",
-    },
-}
+SEED_PATIENTS: dict[str, dict] = {}
 
 # ── System Logs ──────────────────────────────────────────────────────────
 
-SEED_LOGS: list[dict] = [
-    {"id": "LOG-001", "timestamp": _ts(120), "level": "INFO",    "source": "system",   "action": "server_start",     "message": "IVR Simulator backend started on port 8000",             "details": None},
-    {"id": "LOG-002", "timestamp": _ts(115), "level": "INFO",    "source": "nlu",      "action": "engine_init",      "message": "NLU engine initialized — 11 intents loaded",             "details": {"intents_count": 11}},
-    {"id": "LOG-003", "timestamp": _ts(110), "level": "INFO",    "source": "triage",   "action": "engine_init",      "message": "Triage ILP engine initialized — 7 clinical rules",       "details": {"rules_count": 7}},
-    {"id": "LOG-004", "timestamp": _ts(105), "level": "INFO",    "source": "dispatch", "action": "engine_init",      "message": "Dispatch ILP engine initialized — 12 ambulances loaded", "details": {"fleet_size": 12}},
-    {"id": "LOG-005", "timestamp": _ts(90),  "level": "INFO",    "source": "calls",    "action": "call_start",       "message": "Call SIM-A1B2C3D4 started — scenario: emergency-chest-pain", "details": {"call_id": "SIM-A1B2C3D4", "scenario": "emergency-chest-pain"}},
-    {"id": "LOG-006", "timestamp": _ts(89),  "level": "INFO",    "source": "nlu",      "action": "nlu_analyze",      "message": "Intent detected: symptom.emergency (confidence: 0.95)",  "details": {"intent": "symptom.emergency", "confidence": 0.95}},
-    {"id": "LOG-007", "timestamp": _ts(88),  "level": "WARNING", "source": "triage",   "action": "triage_assess",    "message": "EMERGENCY triage — chest pain + age>40 hard constraint triggered", "details": {"triage_level": "EMERGENCY", "severity": 10}},
-    {"id": "LOG-008", "timestamp": _ts(87),  "level": "INFO",    "source": "dispatch", "action": "dispatch_assign",  "message": "AMB-009 dispatched — ETA 3 min to patient location",     "details": {"ambulance": "AMB-009", "eta_minutes": 3}},
-    {"id": "LOG-009", "timestamp": _ts(85),  "level": "INFO",    "source": "calls",    "action": "call_end",         "message": "Call SIM-A1B2C3D4 completed — 4 steps, 62s duration",    "details": {"call_id": "SIM-A1B2C3D4", "steps": 4, "duration": 62}},
-    {"id": "LOG-010", "timestamp": _ts(60),  "level": "INFO",    "source": "calls",    "action": "call_start",       "message": "Call SIM-E5F6G7H8 started — free-form call",             "details": {"call_id": "SIM-E5F6G7H8"}},
-    {"id": "LOG-011", "timestamp": _ts(58),  "level": "INFO",    "source": "nlu",      "action": "nlu_analyze",      "message": "Intent detected: appointment.booking (confidence: 0.92)", "details": {"intent": "appointment.booking", "confidence": 0.92}},
-    {"id": "LOG-012", "timestamp": _ts(55),  "level": "INFO",    "source": "calls",    "action": "call_end",         "message": "Call SIM-E5F6G7H8 completed — 3 steps, 45s duration",    "details": {"call_id": "SIM-E5F6G7H8", "steps": 3, "duration": 45}},
-    {"id": "LOG-013", "timestamp": _ts(30),  "level": "ERROR",   "source": "dispatch", "action": "dispatch_failed",  "message": "No ALS ambulances available — all units dispatched",     "details": {"requested_type": "ALS", "available": 0}},
-    {"id": "LOG-014", "timestamp": _ts(25),  "level": "WARNING", "source": "triage",   "action": "resource_low",     "message": "ER capacity at 60% — 4 of 10 beds available",           "details": {"facility": "emergency_room", "available": 4, "total": 10}},
-    {"id": "LOG-015", "timestamp": _ts(10),  "level": "INFO",    "source": "patients", "action": "patient_lookup",   "message": "Patient PAT-003 (Robert Chen) record accessed",         "details": {"patient_id": "PAT-003"}},
-    {"id": "LOG-016", "timestamp": _ts(5),   "level": "INFO",    "source": "system",   "action": "health_check",     "message": "System health check — all services operational",         "details": {"nlu": "ok", "triage": "ok", "dispatch": "ok"}},
-]
+SEED_LOGS: list[dict] = []

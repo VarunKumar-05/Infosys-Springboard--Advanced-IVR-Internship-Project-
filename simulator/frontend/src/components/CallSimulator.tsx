@@ -337,7 +337,6 @@ export default function CallSimulator() {
       return;
     const text = input.trim();
     setInput("");
-    setTranscript((t) => [...t, { speaker: "patient", content: text }]);
     setCallState("processing");
     wsRef.current.send(JSON.stringify({ type: "text_input", text }));
   }, [input]);
