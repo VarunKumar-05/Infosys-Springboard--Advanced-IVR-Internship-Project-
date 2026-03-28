@@ -3,7 +3,7 @@
  * Uses the Vite proxy so all calls go to /api/...
  */
 
-const BASE = import.meta.env.VITE_API_BASE_URL || "";
+const BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 
 // ── Generic fetch helper ────────────────────────────────────────────
 
