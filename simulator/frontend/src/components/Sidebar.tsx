@@ -19,9 +19,15 @@ const iconMap: Record<string, React.ReactNode> = {
 
 interface Props {
   items: MenuItem[];
+  children?: React.ReactNode;
 }
 
-export default function Sidebar({ items }: Props) {
+export default function Sidebar({ items, children }: Props) {
+  // Detect if admin-prefixed routes are being used
+  const homeRoute = items.length > 0 && items[0].route.startsWith("/admin")
+    ? "/admin/dashboard"
+    : "/";
+
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -31,12 +37,12 @@ export default function Sidebar({ items }: Props) {
 
       <nav className="sidebar-nav">
         <NavLink
-          to="/"
+          to={homeRoute}
           end
           className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
         >
           <Home size={18} />
-          <span>Home</span>
+          <span>Dashboard</span>
         </NavLink>
 
         {items.map((item) => (
@@ -50,6 +56,8 @@ export default function Sidebar({ items }: Props) {
           </NavLink>
         ))}
       </nav>
+
+      {children}
 
       <div className="sidebar-footer">
         v1.0.0 •{" "}

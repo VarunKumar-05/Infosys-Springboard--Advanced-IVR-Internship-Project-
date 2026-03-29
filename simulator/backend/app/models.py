@@ -45,6 +45,12 @@ class InputType(str, Enum):
     TEXT = "text"
     VOICE = "voice"
 
+class DtmfKey(str, Enum):
+    ONE = "1"
+    TWO = "2"
+    THREE = "3"
+    FOUR = "4"
+
 class Sentiment(str, Enum):
     POSITIVE = "POSITIVE"
     NEUTRAL = "NEUTRAL"
@@ -156,6 +162,34 @@ class CallSummary(BaseModel):
     final_triage: Optional[TriageLevel] = None
     ambulance_assigned: Optional[str] = None
     transcript: list[dict]
+
+
+class DtmfPromptRequest(BaseModel):
+    dtmf_key: DtmfKey
+
+
+class DtmfPromptResponse(BaseModel):
+    call_session_id: str
+    dtmf_key: DtmfKey
+    intent: str
+    acknowledgment_text: str
+    audio_base64: Optional[str] = None
+    tts_status: str
+    timestamp: datetime
+
+
+class DtmfSubmitResponse(BaseModel):
+    call_session_id: str
+    dtmf_key: DtmfKey
+    intent: str
+    transcript: str
+    extracted_details: dict
+    confirmation_text: str
+    nlu: Optional[NluResult] = None
+    stt_status: str
+    database_status: str
+    timestamp: datetime
+    errors: list[str] = []
 
 
 # ── NLU Models ────────────────────────────────────────────────────────────

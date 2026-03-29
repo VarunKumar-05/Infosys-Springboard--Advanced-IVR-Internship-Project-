@@ -45,6 +45,16 @@ interface ResponseData {
   actions?: string[];
 }
 
+type DtmfKey = "1" | "2" | "3" | "4";
+type DtmfPhase = "idle" | "tts" | "listening" | "submitting" | "done" | "error";
+
+const DTMF_OPTIONS: Array<{ key: DtmfKey; title: string; hint: string }> = [
+  { key: "1", title: "Booking an Appointment", hint: "Press 1" },
+  { key: "2", title: "Canceling an Appointment", hint: "Press 2" },
+  { key: "3", title: "Booking an Ambulance", hint: "Press 3" },
+  { key: "4", title: "Canceling an Ambulance", hint: "Press 4" },
+];
+
 // ── Component ────────────────────────────────────────────────────────────
 
 export default function CallSimulator() {
@@ -57,6 +67,9 @@ export default function CallSimulator() {
   const [input, setInput] = useState("");
   const [lastResponse, setLastResponse] = useState<ResponseData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dtmfPhase, setDtmfPhase] = useState<DtmfPhase>("idle");
+  const [dtmfSelection, setDtmfSelection] = useState<DtmfKey | null>(null);
+  const [dtmfError, setDtmfError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -152,6 +165,143 @@ export default function CallSimulator() {
     }
   }, []);
 
+  const playBase64Audio = useCallback(async (audioBase64?: string) => {
+    if (!audioBase64) return;
+    const binary = atob(audioBase64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    audioQueueRef.current.push(bytes);
+    await playAudioQueue();
+  }, [playAudioQueue]);
+
+  const captureDtmfResponseAudio = useCallback(async (durationMs = 5000) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Microphone not supported in this browser.");
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const chunks: Blob[] = [];
+
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus"
+      : "audio/webm";
+
+    const recorder = new MediaRecorder(stream, { mimeType });
+
+    return await new Promise<Blob>((resolve, reject) => {
+      let done = false;
+      const cleanup = () => {
+        stream.getTracks().forEach((t) => t.stop());
+      };
+      const finish = () => {
+        if (done) return;
+        done = true;
+        cleanup();
+        resolve(new Blob(chunks, { type: "audio/webm" }));
+      };
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      recorder.onerror = () => {
+        if (done) return;
+        done = true;
+        cleanup();
+        reject(new Error("Could not capture microphone audio."));
+      };
+      recorder.onstop = finish;
+
+      recorder.start(200);
+      window.setTimeout(() => {
+        if (recorder.state !== "inactive") recorder.stop();
+      }, durationMs);
+    });
+  }, []);
+
+  const handleDtmfPress = useCallback(async (key: DtmfKey) => {
+    if (!callId) {
+      setDtmfError("Start a call to use DTMF keypad options.");
+      return;
+    }
+
+    setDtmfSelection(key);
+    setDtmfError(null);
+    setDtmfPhase("tts");
+
+    try {
+      const prompt = await api.requestDtmfPrompt(callId, key);
+      setTranscript((prev) => [...prev, { speaker: "system", content: prompt.acknowledgment_text }]);
+
+      await playBase64Audio(prompt.audio_base64);
+
+      setDtmfPhase("listening");
+      const capturedAudio = await captureDtmfResponseAudio();
+
+      setDtmfPhase("submitting");
+      const submit = await api.submitDtmfInput(callId, key, capturedAudio);
+
+      if (submit.transcript) {
+        setTranscript((prev) => [...prev, { speaker: "patient", content: submit.transcript }]);
+      }
+      setTranscript((prev) => [...prev, { speaker: "system", content: submit.confirmation_text }]);
+
+      if (submit.nlu) {
+        setLastResponse({
+          text: submit.confirmation_text,
+          nlu: submit.nlu,
+        });
+      }
+
+      if (submit.errors.length > 0) {
+        setDtmfError(submit.errors.join(" | "));
+        setDtmfPhase("error");
+        return;
+      }
+
+      setDtmfPhase("done");
+    } catch (err) {
+      setDtmfError(err instanceof Error ? err.message : "DTMF request failed.");
+      setDtmfPhase("error");
+    }
+  }, [callId, captureDtmfResponseAudio, playBase64Audio]);
+
+  // ── Global Keyboard Listener for DTMF inputs ────────────────────────────
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing in a text field
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT"
+      ) {
+        return;
+      }
+
+      // Check if call is active and DTMF phase allows input
+      if (
+        !callId ||
+        callState === "connecting" ||
+        dtmfPhase === "tts" ||
+        dtmfPhase === "listening" ||
+        dtmfPhase === "submitting"
+      ) {
+        return;
+      }
+
+      const validKeys = ["1", "2", "3", "4"];
+      if (validKeys.includes(e.key)) {
+        e.preventDefault();
+        handleDtmfPress(e.key as DtmfKey);
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [callId, callState, dtmfPhase, handleDtmfPress]);
+
   // ── WebSocket Connection ────────────────────────────────────────────────
 
   const startCall = useCallback(() => {
@@ -161,6 +311,9 @@ export default function CallSimulator() {
     setTranscript([]);
     setLastResponse(null);
     setError(null);
+    setDtmfPhase("idle");
+    setDtmfSelection(null);
+    setDtmfError(null);
 
     // Extract the host from VITE_API_BASE_URL so WebSockets point to the backend (e.g. Render)
     const apiBase = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
@@ -279,6 +432,8 @@ export default function CallSimulator() {
 
     setCallState("idle");
     setCallId(null);
+    setDtmfPhase("idle");
+    setDtmfSelection(null);
     wsRef.current = null;
   }, []);
 
@@ -437,6 +592,59 @@ export default function CallSimulator() {
           )}
         </div>
       )}
+
+      <div className="card fade-in" style={{ marginTop: 12 }}>
+        <div className="card-header">
+          <h3>DTMF Keypad</h3>
+        </div>
+        <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 10 }}>
+          Always available options: 1 Booking Appointment, 2 Canceling Appointment, 3 Booking Ambulance, 4 Canceling Ambulance.
+        </p>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 8,
+          }}
+        >
+          {DTMF_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              className="btn btn-secondary"
+              onClick={() => handleDtmfPress(opt.key)}
+              disabled={
+                !callId ||
+                callState === "connecting" ||
+                dtmfPhase === "tts" ||
+                dtmfPhase === "listening" ||
+                dtmfPhase === "submitting"
+              }
+              style={{
+                minHeight: 58,
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                alignItems: "flex-start",
+                gap: 2,
+              }}
+              title={callId ? "Select DTMF option" : "Start call to enable keypad"}
+            >
+              <span style={{ fontWeight: 700 }}>{opt.hint}</span>
+              <span style={{ fontSize: 12, opacity: 0.9 }}>{opt.title}</span>
+            </button>
+          ))}
+        </div>
+        <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-muted)" }}>
+          Status: {dtmfPhase}
+          {dtmfSelection ? ` | Last key: ${dtmfSelection}` : ""}
+          {!callId ? " | Start a call to activate DTMF flow." : ""}
+        </div>
+        {dtmfError && (
+          <p style={{ marginTop: 8, fontSize: 12, color: "var(--danger, #d9534f)" }}>
+            {dtmfError}
+          </p>
+        )}
+      </div>
 
       {/* ── Active Call Panel ────────────────────────────────────── */}
       {callState !== "idle" && (

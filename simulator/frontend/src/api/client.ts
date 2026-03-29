@@ -22,6 +22,18 @@ async function request<T>(
   return res.json();
 }
 
+async function requestForm<T>(path: string, formData: FormData): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 function get<T>(path: string) { return request<T>(path); }
 function post<T>(path: string, body?: unknown) {
   return request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined });
@@ -184,6 +196,30 @@ export interface Analytics {
   timestamp: string;
 }
 
+export interface DtmfPromptResponse {
+  call_session_id: string;
+  dtmf_key: "1" | "2" | "3" | "4";
+  intent: string;
+  acknowledgment_text: string;
+  audio_base64?: string;
+  tts_status: "ok" | "empty_audio" | "failed";
+  timestamp: string;
+}
+
+export interface DtmfSubmitResponse {
+  call_session_id: string;
+  dtmf_key: "1" | "2" | "3" | "4";
+  intent: string;
+  transcript: string;
+  extracted_details: Record<string, unknown>;
+  confirmation_text: string;
+  nlu?: NluResult;
+  stt_status: "ok" | "failed";
+  database_status: "stored" | "failed";
+  timestamp: string;
+  errors: string[];
+}
+
 // ── API Functions ───────────────────────────────────────────────────
 
 export const api = {
@@ -204,6 +240,18 @@ export const api = {
   getCallStatus: (callId: string) => get<CallStatus>(`/api/calls/${callId}/status`),
   endCall: (callId: string) =>
     post<unknown>(`/api/calls/${callId}/end`, { reason: "user_ended" }),
+  requestDtmfPrompt: (callId: string, dtmfKey: "1" | "2" | "3" | "4") =>
+    post<DtmfPromptResponse>(`/api/calls/${callId}/dtmf/prompt`, { dtmf_key: dtmfKey }),
+  submitDtmfInput: (
+    callId: string,
+    dtmfKey: "1" | "2" | "3" | "4",
+    audioBlob: Blob
+  ) => {
+    const formData = new FormData();
+    formData.append("dtmf_key", dtmfKey);
+    formData.append("audio_file", audioBlob, "dtmf-response.webm");
+    return requestForm<DtmfSubmitResponse>(`/api/calls/${callId}/dtmf/submit`, formData);
+  },
   listActiveCalls: () => get<unknown[]>("/api/calls"),
   getActiveCalls: () => get<unknown[]>("/api/analytics/active-calls"),
 

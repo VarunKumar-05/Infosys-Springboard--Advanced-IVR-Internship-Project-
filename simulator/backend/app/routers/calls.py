@@ -4,22 +4,55 @@ Call simulation endpoints — start, interact with, and end simulated IVR calls.
 
 from __future__ import annotations
 import asyncio
+import base64
 import json
 import os
 import uuid
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from app.models import (
     CallStartRequest, CallStartResponse, CallInputRequest, CallInputResponse,
     CallStatusResponse, CallEndRequest, CallSummary,
     CallStatus, TriageLevel, NluResult, TriageResult, DispatchResult,
+    DtmfKey, DtmfPromptRequest, DtmfPromptResponse, DtmfSubmitResponse,
 )
 from app.database import (
     SCENARIOS, ACTIVE_CALLS, CALL_HISTORY, ANALYTICS, _now,
-    lookup_patient_by_phone, create_patient
+    lookup_patient_by_phone, create_patient, log_call_event
 )
 from app.services import nlu_engine, triage_engine, dispatch_engine
 
 router = APIRouter(prefix="/api/calls", tags=["Call Simulation"])
+
+
+DTMF_ACTIONS = {
+    DtmfKey.ONE.value: {
+        "intent": "appointment.booking",
+        "label": "Booking an Appointment",
+        "ack": "You selected Booking an Appointment. Please provide the details.",
+    },
+    DtmfKey.TWO.value: {
+        "intent": "appointment.cancel",
+        "label": "Canceling an Appointment",
+        "ack": "You selected Canceling an Appointment. Please provide the details.",
+    },
+    DtmfKey.THREE.value: {
+        "intent": "ambulance.booking",
+        "label": "Booking an Ambulance",
+        "ack": "You selected Booking an Ambulance. Please provide the details.",
+    },
+    DtmfKey.FOUR.value: {
+        "intent": "ambulance.cancel",
+        "label": "Canceling an Ambulance",
+        "ack": "You selected Canceling an Ambulance. Please provide the details.",
+    },
+}
+
+
+def _get_dtmf_action(dtmf_key: str) -> dict:
+    action = DTMF_ACTIONS.get(dtmf_key)
+    if not action:
+        raise HTTPException(400, "Unsupported DTMF key. Use 1, 2, 3, or 4.")
+    return action
 
 
 @router.post("/start", status_code=201, summary="Start a new simulated call")
@@ -232,6 +265,159 @@ async def process_input(call_id: str, body: CallInputRequest) -> CallInputRespon
         call_status=session["status"],
         actions=actions_list,
         response_text=system_response,
+    )
+
+
+@router.post("/{call_id}/dtmf/prompt", summary="Generate DTMF prompt audio", response_model=DtmfPromptResponse)
+async def dtmf_prompt(call_id: str, body: DtmfPromptRequest) -> DtmfPromptResponse:
+    """Generate acknowledgment TTS audio for a DTMF selection."""
+    if call_id not in ACTIVE_CALLS:
+        raise HTTPException(404, f"Call session '{call_id}' not found")
+
+    session = ACTIVE_CALLS[call_id]
+    if session["status"] != CallStatus.IN_PROGRESS:
+        raise HTTPException(400, f"Call is not in progress (status: {session['status']})")
+
+    action = _get_dtmf_action(body.dtmf_key.value)
+    now = _now()
+    acknowledgment_text = action["ack"]
+    audio_base64 = None
+    tts_status = "ok"
+
+    try:
+        from app.routers.tts import synthesize_speech
+        audio = await synthesize_speech(acknowledgment_text)
+        if audio:
+            audio_base64 = base64.b64encode(audio).decode("ascii")
+        else:
+            tts_status = "empty_audio"
+    except Exception:
+        tts_status = "failed"
+
+    session["current_step"] += 1
+    session["transcript"].append({
+        "step": session["current_step"],
+        "speaker": "system",
+        "content": acknowledgment_text,
+        "timestamp": now.isoformat(),
+    })
+
+    return DtmfPromptResponse(
+        call_session_id=call_id,
+        dtmf_key=body.dtmf_key,
+        intent=action["intent"],
+        acknowledgment_text=acknowledgment_text,
+        audio_base64=audio_base64,
+        tts_status=tts_status,
+        timestamp=now,
+    )
+
+
+@router.post("/{call_id}/dtmf/submit", summary="Submit DTMF follow-up audio", response_model=DtmfSubmitResponse)
+async def dtmf_submit(
+    call_id: str,
+    dtmf_key: DtmfKey = Form(...),
+    audio_file: UploadFile = File(...),
+) -> DtmfSubmitResponse:
+    """Transcribe and persist details after a DTMF selection."""
+    if call_id not in ACTIVE_CALLS:
+        raise HTTPException(404, f"Call session '{call_id}' not found")
+
+    session = ACTIVE_CALLS[call_id]
+    if session["status"] != CallStatus.IN_PROGRESS:
+        raise HTTPException(400, f"Call is not in progress (status: {session['status']})")
+
+    action = _get_dtmf_action(dtmf_key.value)
+    now = _now()
+    errors: list[str] = []
+
+    try:
+        audio_bytes = await audio_file.read()
+    except Exception as exc:
+        raise HTTPException(400, f"Unable to read uploaded audio: {exc}")
+
+    if not audio_bytes:
+        raise HTTPException(400, "Audio payload is empty")
+
+    from app.routers.stt import transcribe_audio_bytes
+    transcript = await transcribe_audio_bytes(audio_bytes)
+    stt_status = "ok" if transcript else "failed"
+    transcript = transcript or ""
+
+    if not transcript:
+        errors.append("STT did not return a transcript")
+
+    nlu_result: NluResult | None = None
+    extracted_details: dict = {"free_text": transcript}
+    if transcript:
+        try:
+            nlu = nlu_engine.analyze(transcript, session.get("language", "en-US"))
+            nlu_result = NluResult(
+                intent=nlu["intent"],
+                confidence=nlu["confidence"],
+                entities=nlu["entities"],
+                sentiment=nlu["sentiment"],
+                distress_score=nlu["distress_score"],
+            )
+            extracted_details = {
+                "free_text": transcript,
+                "entities": nlu.get("entities", {}),
+                "sentiment": nlu.get("sentiment"),
+                "confidence": nlu.get("confidence"),
+            }
+        except Exception as exc:
+            errors.append(f"NLU processing failed: {exc}")
+
+    db_status = "stored"
+    event_payload = {
+        "source": "dtmf",
+        "dtmf_key": dtmf_key.value,
+        "intent": action["intent"],
+        "intent_label": action["label"],
+        "details": extracted_details,
+        "timestamp": now.isoformat(),
+    }
+
+    try:
+        log_call_event(call_id, "dtmf_submission", event_payload)
+    except Exception as exc:
+        db_status = "failed"
+        errors.append(f"Database persistence failed: {exc}")
+
+    if transcript:
+        session["current_step"] += 1
+        session["transcript"].append({
+            "step": session["current_step"],
+            "speaker": "patient",
+            "content": transcript,
+            "timestamp": now.isoformat(),
+        })
+
+    confirmation_text = (
+        f"Captured your request for {action['label']}. "
+        f"Received details: {transcript or 'No speech detected. Please try again.'}"
+    )
+
+    session["current_step"] += 1
+    session["transcript"].append({
+        "step": session["current_step"],
+        "speaker": "system",
+        "content": confirmation_text,
+        "timestamp": _now().isoformat(),
+    })
+
+    return DtmfSubmitResponse(
+        call_session_id=call_id,
+        dtmf_key=dtmf_key,
+        intent=action["intent"],
+        transcript=transcript,
+        extracted_details=extracted_details,
+        confirmation_text=confirmation_text,
+        nlu=nlu_result,
+        stt_status=stt_status,
+        database_status=db_status,
+        timestamp=now,
+        errors=errors,
     )
 
 
