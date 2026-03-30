@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, useNavigate, Navigate } from "react-router-dom";
-import { UserButton } from "@clerk/react";
+import { useAuth } from "../context/AuthContext";
+import { LogOut } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import CallSimulator from "../components/CallSimulator";
 import ScenarioManager from "../components/ScenarioManager";
@@ -144,21 +145,28 @@ export default function AdminDashboard() {
     route: `/admin${item.route}`,
   }));
 
+  const { logout } = useAuth();
+  const nav = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    nav("/");
+  };
+
   return (
     <div className="app-layout">
       <Sidebar items={adminMenuItems}>
-        {/* User button in sidebar */}
+        {/* Logout button in sidebar */}
         <div style={{ padding: "8px 16px", borderTop: "1px solid var(--border)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: { width: 32, height: 32 },
-                },
-              }}
-            />
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Admin</span>
-          </div>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={handleLogout}
+            style={{ width: "100%", justifyContent: "flex-start", gap: 8 }}
+            id="admin-logout-btn"
+          >
+            <LogOut size={14} />
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Sign Out</span>
+          </button>
         </div>
       </Sidebar>
       <main className="main-content">

@@ -191,6 +191,7 @@ CRITICAL RULES — ALWAYS FOLLOW:
 - When a patient describes EMERGENCY symptoms (severe chest pain, can't breathe, stroke,
   heavy bleeding, unconscious), IMMEDIATELY call dispatch_ambulance with severity >= 8.
   Do NOT ask questions first — act immediately.
+- When asked to cancel an appointment, ALWAYS call cancel_appointment immediately with any provided context details.
 - When asked to confirm or book, ALWAYS call the tool. Never just say "I'll book that"
   without actually calling book_appointment.
 - Be empathetic, professional, and concise (responses are spoken aloud via TTS).
@@ -205,6 +206,7 @@ ROUTING — which doctor for which condition:
 
 TOOL USAGE:
 - book_appointment: Use for ALL non-emergency appointment requests. Required: doctor_name, department, date, time, reason. Optional: patient_name (default 'Unknown').
+- cancel_appointment: Use to cancel an existing appointment based on gathered details.
 - dispatch_ambulance: Use ONLY for life-threatening emergencies (severity >= 8).
 - query_patient_history: Use to look up existing records by name/phone/symptoms.
 - update_patient_record: Use to log call notes and new symptoms.
@@ -335,6 +337,33 @@ ORCHESTRATION_TOOLS = [
                 required=["doctor_name", "department", "date", "time", "reason"],
             ),
         ),
+        genai_types.FunctionDeclaration(
+            name="cancel_appointment",
+            description=(
+                "Cancel an existing doctor appointment. Provide any known details to help locate it."
+            ),
+            parameters=genai_types.Schema(
+                type="OBJECT",
+                properties={
+                    "patient_name": genai_types.Schema(
+                        type="STRING",
+                        description="Patient name (if known)",
+                    ),
+                    "doctor_name": genai_types.Schema(
+                        type="STRING",
+                        description="Doctor name if specified",
+                    ),
+                    "department": genai_types.Schema(
+                        type="STRING",
+                        description="Department: Cardiology, Pediatrics, Gynaecology, or General Medicine",
+                    ),
+                    "date": genai_types.Schema(
+                        type="STRING",
+                        description="Date of the appointment if specified",
+                    ),
+                },
+            ),
+        ),
     ])
 ] if has_gemini else []
 
@@ -344,7 +373,7 @@ def _execute_tool_call(name: str, arguments: dict, call_id: str) -> str:
     from app.database import (
         lookup_patient_by_symptoms, lookup_patient_by_name,
         lookup_patient_by_phone, update_patient_record, log_call_event,
-        book_appointment,
+        book_appointment, cancel_appointment,
     )
     from app.services import dispatch_engine, triage_engine
 
@@ -425,6 +454,17 @@ def _execute_tool_call(name: str, arguments: dict, call_id: str) -> str:
         )
         log_call_event(call_id, "appointment_booked", appointment)
         return json.dumps(appointment, default=str)
+
+    elif name == "cancel_appointment":
+        appointment_res = cancel_appointment(
+            patient_name=arguments.get("patient_name"),
+            department=arguments.get("department"),
+            doctor_name=arguments.get("doctor_name"),
+            date=arguments.get("date"),
+        )
+        if "error" not in appointment_res:
+            log_call_event(call_id, "appointment_cancelled", appointment_res)
+        return json.dumps(appointment_res, default=str)
 
     return json.dumps({"error": f"Unknown tool: {name}"})
 
@@ -536,6 +576,8 @@ def _run_llm_with_tools(messages: list[dict], call_id: str, system_instruction: 
             response_text = "An ambulance has been dispatched to your location immediately. Please stay on the line and remain calm. Help is on the way."
         elif any(a["tool"] == "book_appointment" for a in actions):
             response_text = "Your appointment has been booked successfully. Is there anything else I can help with?"
+        elif any(a["tool"] == "cancel_appointment" for a in actions):
+            response_text = "Your appointment has been successfully canceled. Let me know if you would like me to help with anything else."
         else:
             response_text = "I understand. How can I help you further?"
 
@@ -575,6 +617,8 @@ def _generate_fallback_response(nlu_result: dict, call_id: str) -> str:
     if intent == "appointment.booking":
         return ("I'd be happy to help schedule an appointment. Dr. Smith has openings "
                 "on Monday at 10 AM and Wednesday at 2:30 PM. Which works better?")
+    if intent == "appointment.cancel":
+        return "I have canceled your appointment. Let me know if you would like to reschedule."
     if intent == "appointment.confirm":
         return "Your appointment has been confirmed. You'll receive an SMS confirmation shortly."
     if intent == "prescription.refill":

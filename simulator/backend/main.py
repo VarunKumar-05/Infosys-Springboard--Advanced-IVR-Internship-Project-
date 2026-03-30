@@ -40,11 +40,18 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.routers import scenarios, calls, nlu, triage, dispatch, analytics, patients, logs, settings, stt, tts
+from app.routers import scenarios, calls, nlu, triage, dispatch, analytics, patients, logs, settings, stt, tts, auth
 
 # ── Initialize PostgreSQL ──────────────────────────────────────────
 # from app import postgres_db
 # postgres_db.init_db()  # Disabled to speed up Vercel Serverless Cold Starts
+
+# ── Initialize Auth Database ──────────────────────────────────────────
+try:
+    from app import auth_db
+    auth_db.init_auth_db()
+except Exception as e:
+    print(f"[Warning] Auth DB init failed (will retry on first request): {e}")
 
 # ── Application ─────────────────────────────────────────────────────────────
 
@@ -88,6 +95,7 @@ app.include_router(logs.router)
 app.include_router(settings.router)
 app.include_router(stt.router)
 app.include_router(tts.router)
+app.include_router(auth.router)
 
 
 # ── Root & menu ──────────────────────────────────────────────────────────

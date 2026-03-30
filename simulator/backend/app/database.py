@@ -410,6 +410,35 @@ def get_all_appointments() -> list[dict]:
     return db.fetch_all("SELECT * FROM appointments ORDER BY created_at DESC")
 
 
+def cancel_appointment(patient_name: str = None, department: str = None, doctor_name: str = None, date: str = None) -> dict:
+    """Cancel an appointment based on given criteria"""
+    query = "SELECT * FROM appointments WHERE status = 'confirmed'"
+    args = []
+    
+    if patient_name and patient_name.lower() != "unknown":
+        query += " AND LOWER(patient_name) LIKE %s"
+        args.append(f"%{patient_name.lower()}%")
+    if department:
+        query += " AND LOWER(department) LIKE %s"
+        args.append(f"%{department.lower()}%")
+    if doctor_name:
+        query += " AND LOWER(doctor_name) LIKE %s"
+        args.append(f"%{doctor_name.lower()}%")
+    if date:
+        query += " AND date = %s"
+        args.append(date)
+        
+    query += " ORDER BY created_at DESC LIMIT 1"
+    
+    row = db.fetch_one(query, tuple(args))
+    if not row:
+        return {"error": "No matching confirmed appointment found to cancel."}
+    
+    db.execute("UPDATE appointments SET status = 'cancelled' WHERE id = %s", (row["id"],))
+    row["status"] = "cancelled"
+    return {"message": "Appointment cancelled successfully.", "appointment": row}
+
+
 class _AppointmentsProxy:
     """List-like proxy for appointments in PostgreSQL."""
     def append(self, entry):

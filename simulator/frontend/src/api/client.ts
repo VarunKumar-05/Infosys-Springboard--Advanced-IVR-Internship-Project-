@@ -7,12 +7,17 @@ const BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 
 // ── Generic fetch helper ────────────────────────────────────────────
 
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders(), ...init?.headers },
     ...init,
   });
   if (!res.ok) {
@@ -25,6 +30,7 @@ async function request<T>(
 async function requestForm<T>(path: string, formData: FormData): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
+    headers: { ...getAuthHeaders() },
     body: formData,
   });
   if (!res.ok) {

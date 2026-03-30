@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { UserButton } from "@clerk/react";
+import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import type { Scenario } from "../api/client";
 import { api } from "../api/client";
@@ -12,6 +12,7 @@ import {
   Volume2,
   Delete,
   ArrowLeft,
+  LogOut,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -95,6 +96,12 @@ const keypadRows = [
 
 export default function CallerUI() {
   const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
 
   // Dialer state
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -623,13 +630,15 @@ export default function CallerUI() {
             AI-<span>IVR</span> Caller
           </h1>
         </div>
-        <UserButton
-          appearance={{
-            elements: {
-              avatarBox: { width: 36, height: 36 },
-            },
-          }}
-        />
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={handleLogout}
+          id="caller-logout-btn"
+          style={{ display: "flex", alignItems: "center", gap: 6 }}
+        >
+          <LogOut size={16} />
+          Sign Out
+        </button>
       </header>
 
       {/* Body */}

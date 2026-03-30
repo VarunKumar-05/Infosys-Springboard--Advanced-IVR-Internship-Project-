@@ -1,11 +1,11 @@
-import { useUser } from "@clerk/react";
 import { Navigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 /**
  * RequireAuth — Redirects unauthenticated users to the landing page.
  */
 export function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isSignedIn, isLoaded } = useUser();
+  const { isAuthenticated, isLoaded } = useAuth();
 
   if (!isLoaded) {
     return (
@@ -23,7 +23,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isSignedIn) {
+  if (!isAuthenticated) {
     return <Navigate to="/" replace />;
   }
 
@@ -31,7 +31,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * RequireRole — Checks user's publicMetadata.role.
+ * RequireRole — Checks user's role from JWT token.
  * Redirects non-matching users to /call (regular user default).
  */
 export function RequireRole({
@@ -41,7 +41,7 @@ export function RequireRole({
   role: string;
   children: React.ReactNode;
 }) {
-  const { user, isLoaded } = useUser();
+  const { user, isLoaded } = useAuth();
 
   if (!isLoaded) {
     return (
@@ -59,9 +59,7 @@ export function RequireRole({
     );
   }
 
-  const userRole = (user?.publicMetadata as { role?: string })?.role;
-
-  if (userRole !== role) {
+  if (user?.role !== role) {
     return <Navigate to="/call" replace />;
   }
 

@@ -1,6 +1,6 @@
-import { useUser, SignInButton, UserButton } from "@clerk/react";
 import { useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useState, useEffect } from "react";
 import {
   Brain,
   Activity,
@@ -12,6 +12,10 @@ import {
   Sparkles,
   Phone,
   Shield,
+  UserPlus,
+  LogIn,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 const features = [
@@ -54,20 +58,75 @@ const features = [
 ];
 
 export default function LandingPage() {
-  const { isSignedIn, user, isLoaded } = useUser();
+  const { isAuthenticated, isLoaded, user, login, signup } = useAuth();
   const navigate = useNavigate();
+
+  // Auth form state
+  const [authTab, setAuthTab] = useState<"signin" | "signup">("signin");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Sign In fields
+  const [signInEmail, setSignInEmail] = useState("");
+  const [signInPassword, setSignInPassword] = useState("");
+
+  // Sign Up fields
+  const [signUpName, setSignUpName] = useState("");
+  const [signUpAge, setSignUpAge] = useState("");
+  const [signUpPhone, setSignUpPhone] = useState("");
+  const [signUpEmail, setSignUpEmail] = useState("");
+  const [signUpPassword, setSignUpPassword] = useState("");
+
+  // Show auth modal
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Redirect signed-in users based on role
   useEffect(() => {
-    if (isLoaded && isSignedIn && user) {
-      const role = (user.publicMetadata as { role?: string })?.role;
-      if (role === "admin") {
+    if (isLoaded && isAuthenticated && user) {
+      if (user.role === "admin") {
         navigate("/admin/dashboard", { replace: true });
       } else {
         navigate("/call", { replace: true });
       }
     }
-  }, [isLoaded, isSignedIn, user, navigate]);
+  }, [isLoaded, isAuthenticated, user, navigate]);
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      await login(signInEmail, signInPassword);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign in failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const age = parseInt(signUpAge, 10);
+      if (isNaN(age) || age < 1 || age > 150) {
+        throw new Error("Please enter a valid age (1-150)");
+      }
+      await signup(signUpName, age, signUpPhone, signUpEmail, signUpPassword);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign up failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openAuth = (tab: "signin" | "signup") => {
+    setAuthTab(tab);
+    setShowAuthModal(true);
+    setError(null);
+  };
 
   return (
     <div className="landing-page">
@@ -81,22 +140,22 @@ export default function LandingPage() {
         </div>
 
         <div className="landing-header-actions">
-          {isSignedIn ? (
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: { width: 36, height: 36 },
-                },
-              }}
-            />
-          ) : (
-            <SignInButton mode="modal">
-              <button className="btn btn-primary" id="login-btn">
-                <Shield size={16} />
-                Sign In
-              </button>
-            </SignInButton>
-          )}
+          <button
+            className="btn btn-ghost"
+            onClick={() => openAuth("signin")}
+            id="header-signin-btn"
+          >
+            <LogIn size={16} />
+            Sign In
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => openAuth("signup")}
+            id="header-signup-btn"
+          >
+            <UserPlus size={16} />
+            Sign Up
+          </button>
         </div>
       </header>
 
@@ -120,12 +179,14 @@ export default function LandingPage() {
         </p>
 
         <div className="hero-actions">
-          <SignInButton mode="modal">
-            <button className="btn btn-primary btn-lg" id="hero-get-started-btn">
-              Get Started
-              <ArrowRight size={18} />
-            </button>
-          </SignInButton>
+          <button
+            className="btn btn-primary btn-lg"
+            onClick={() => openAuth("signup")}
+            id="hero-get-started-btn"
+          >
+            Get Started
+            <ArrowRight size={18} />
+          </button>
 
           <a
             href="#features"
@@ -138,6 +199,201 @@ export default function LandingPage() {
           </a>
         </div>
       </section>
+
+      {/* ── Auth Modal ────────────────────────────────────────────── */}
+      {showAuthModal && (
+        <div className="auth-overlay" onClick={() => setShowAuthModal(false)}>
+          <div className="auth-container" onClick={(e) => e.stopPropagation()}>
+            {/* Tabs */}
+            <div className="auth-tabs">
+              <button
+                className={`auth-tab ${authTab === "signin" ? "active" : ""}`}
+                onClick={() => { setAuthTab("signin"); setError(null); }}
+                id="auth-tab-signin"
+              >
+                <LogIn size={16} />
+                Sign In
+              </button>
+              <button
+                className={`auth-tab ${authTab === "signup" ? "active" : ""}`}
+                onClick={() => { setAuthTab("signup"); setError(null); }}
+                id="auth-tab-signup"
+              >
+                <UserPlus size={16} />
+                Sign Up
+              </button>
+            </div>
+
+            {/* Error */}
+            {error && <div className="auth-error">{error}</div>}
+
+            {/* Sign In Form */}
+            {authTab === "signin" && (
+              <form className="auth-form" onSubmit={handleSignIn} id="signin-form">
+                <div className="auth-field">
+                  <label htmlFor="signin-email">Email</label>
+                  <input
+                    type="email"
+                    id="signin-email"
+                    placeholder="you@example.com"
+                    value={signInEmail}
+                    onChange={(e) => setSignInEmail(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="auth-field">
+                  <label htmlFor="signin-password">Password</label>
+                  <div className="auth-password-wrapper">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      id="signin-password"
+                      placeholder="••••••••"
+                      value={signInPassword}
+                      onChange={(e) => setSignInPassword(e.target.value)}
+                      required
+                      minLength={6}
+                    />
+                    <button
+                      type="button"
+                      className="auth-password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-lg auth-submit"
+                  disabled={loading}
+                  id="signin-submit-btn"
+                >
+                  {loading ? (
+                    <span className="auth-spinner" />
+                  ) : (
+                    <>
+                      <Shield size={18} />
+                      Sign In
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {/* Sign Up Form */}
+            {authTab === "signup" && (
+              <form className="auth-form" onSubmit={handleSignUp} id="signup-form">
+                <div className="auth-field">
+                  <label htmlFor="signup-name">Full Name</label>
+                  <input
+                    type="text"
+                    id="signup-name"
+                    placeholder="John Doe"
+                    value={signUpName}
+                    onChange={(e) => setSignUpName(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="auth-row">
+                  <div className="auth-field">
+                    <label htmlFor="signup-age">Age</label>
+                    <input
+                      type="number"
+                      id="signup-age"
+                      placeholder="25"
+                      value={signUpAge}
+                      onChange={(e) => setSignUpAge(e.target.value)}
+                      required
+                      min={1}
+                      max={150}
+                    />
+                  </div>
+                  <div className="auth-field">
+                    <label htmlFor="signup-phone">Phone Number</label>
+                    <input
+                      type="tel"
+                      id="signup-phone"
+                      placeholder="+1-555-000-0000"
+                      value={signUpPhone}
+                      onChange={(e) => setSignUpPhone(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="auth-field">
+                  <label htmlFor="signup-email">Email</label>
+                  <input
+                    type="email"
+                    id="signup-email"
+                    placeholder="you@example.com"
+                    value={signUpEmail}
+                    onChange={(e) => setSignUpEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="auth-field">
+                  <label htmlFor="signup-password">Password</label>
+                  <div className="auth-password-wrapper">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      id="signup-password"
+                      placeholder="Min 6 characters"
+                      value={signUpPassword}
+                      onChange={(e) => setSignUpPassword(e.target.value)}
+                      required
+                      minLength={6}
+                    />
+                    <button
+                      type="button"
+                      className="auth-password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-lg auth-submit"
+                  disabled={loading}
+                  id="signup-submit-btn"
+                >
+                  {loading ? (
+                    <span className="auth-spinner" />
+                  ) : (
+                    <>
+                      <UserPlus size={18} />
+                      Create Account
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            <p className="auth-footer-text">
+              {authTab === "signin" ? (
+                <>
+                  Don't have an account?{" "}
+                  <button className="auth-link" onClick={() => { setAuthTab("signup"); setError(null); }}>
+                    Sign up
+                  </button>
+                </>
+              ) : (
+                <>
+                  Already have an account?{" "}
+                  <button className="auth-link" onClick={() => { setAuthTab("signin"); setError(null); }}>
+                    Sign in
+                  </button>
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Features Section ──────────────────────────────────────── */}
       <section className="features-section" id="features">
